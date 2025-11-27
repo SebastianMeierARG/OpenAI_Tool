@@ -1,42 +1,34 @@
-# General model & embedding config
-model:
-  name: "gemini-2.5-flash"
+thresholds:
+  significance_level_alpha: 0.05
+  auc_tolerance: 0.02
+  jeffrey_priors: 0.5  # Beta distribution parameters (alpha, beta) for Jeffrey's prior
 
-embedder_model: "all-MiniLM-L6-v2"
+ai_settings:
+  model: "gpt-4o"
+  temperature: 0.2
+  max_tokens: 2000
 
-# PDF ingestion / chunking
-pdf:
-  folder: "./pdf_files/"
-chunking:
-  chunk_size: 1100
-  overlap: 150
+prompts:
+  system_persona: |
+    You are a Senior Credit Risk Analyst and Model Validator.
+    Your job is to interpret statistical test results for credit risk models (AUC, Chi-Square, Binomial Tests, etc.) and produce a formal validation report.
+    Be precise, objective, and highlight any red flags or areas of concern.
+    Use professional financial language.
 
-# SerpAPI defaults (used by web search)
-serpapi:
-  k: 8
-  hl: "en"
-  gl: "es"
-  last_year_only: true
+  report_instruction: |
+    Based on the provided statistical data and test results, generate a comprehensive Model Validation Report.
 
-# Retrieval / RAG behavior
-retrieval:
-  top_k_pdf: 5
-  top_k_web: 4
-  max_chars: 2400
+    The report should include:
+    1. **Executive Summary**: A brief overview of the model's performance and recommendation (Accept/Reject/Monitor).
+    2. **AUC Analysis**: Compare Initial vs. Current AUC. Discuss if the deviation is within the acceptable tolerance.
+    3. **Calibration Analysis**:
+        - **Pearson Chi-Square Test**: Interpret the Chi-Square statistic and P-value.
+        - **Binomial Test**: Analyze PD vs Default Rate for each rating grade.
+        - **Jeffrey's Test**: Interpret the results.
+    4. **Population Stability**: Discuss any significant shifts if data is available (or mention it as a limitation).
+    5. **Conclusion**: Final recommendation based on the significance level (Alpha: {alpha}).
 
-# System instructions given to the generator
-system_instructions: |
-  You are a credit risk and regulation assistant.
-  Use the provided context (PDF and web snippets) when relevant,
-  and you may also use your own knowledge.
-  When you use web snippets, include a 'Sources:' section with URLs.
+    Data Provided:
+    {context_data}
 
-# Gradio server parameters
-gradio:
-  server_name: "127.0.0.1"
-  server_port: 7860
-  share: false
-
-# Optional: other tuning
-faiss:
-  index_type: "IndexFlatL2"
+    Format the output in Markdown.
