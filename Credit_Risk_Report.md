@@ -1,0 +1,1 @@
+Error: OpenAI API Key is missing. Cannot generate report.
