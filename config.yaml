@@ -1,42 +1,16 @@
-# General model & embedding config
-model:
-  name: "gemini-2.5-flash"
+thresholds:
+  significance_level_alpha: 0.05
+  auc_tolerance: 0.02
+  jeffrey_priors: 0.5  # Beta distribution parameters (alpha, beta) for Jeffrey's prior
+  min_faithfulness_score: 8
 
-embedder_model: "all-MiniLM-L6-v2"
+ai_settings:
+  model: "gpt-4o"
+  temperature: 0.2
+  max_tokens: 2000
+  max_retries: 2
 
-# PDF ingestion / chunking
-pdf:
-  folder: "./pdf_files/"
-chunking:
-  chunk_size: 1100
-  overlap: 150
-
-# SerpAPI defaults (used by web search)
-serpapi:
-  k: 8
-  hl: "en"
-  gl: "es"
-  last_year_only: true
-
-# Retrieval / RAG behavior
-retrieval:
-  top_k_pdf: 5
-  top_k_web: 4
-  max_chars: 2400
-
-# System instructions given to the generator
-system_instructions: |
-  You are a credit risk and regulation assistant.
-  Use the provided context (PDF and web snippets) when relevant,
-  and you may also use your own knowledge.
-  When you use web snippets, include a 'Sources:' section with URLs.
-
-# Gradio server parameters
-gradio:
-  server_name: "127.0.0.1"
-  server_port: 7860
-  share: false
-
-# Optional: other tuning
-faiss:
-  index_type: "IndexFlatL2"
+prompts:
+  # Paths to templates are implied or can be specified here if we want to be explicit,
+  # but for now we will rely on convention in the code (templates/ folder).
+  # We removed the hardcoded prompts.
