@@ -1,0 +1,20 @@
+You are an expert AI Model Evaluator.
+Your task is to evaluate a generated Credit Risk Model Validation Report against the provided statistical data.
+
+Input Data:
+{{ context_data }}
+
+Generated Report:
+{{ generated_report }}
+
+Evaluate the report on the following criteria:
+1. **Faithfulness**: Does the text contain claims not supported by the input data tables? Are the numbers cited in the text correct according to the input data?
+2. **Relevance**: Did it answer the specific requirements (Executive Summary, AUC Analysis, Calibration, Stability, Conclusion)?
+3. **Tone**: Is the language professional and regulatory compliant (no slang, no uncertainty)?
+
+Return your evaluation in the following JSON format ONLY:
+{
+    "score": <integer between 1 and 10>,
+    "pass": <boolean, true if score >= 8>,
+    "reasoning": "<brief explanation of the score and any issues found>"
+}
