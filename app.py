@@ -1,146 +1,140 @@
 from shiny import App, ui, render, reactive
-from shinywidgets import output_widget, render_widget
-import plotly.graph_objects as go
 import pandas as pd
-import data_loader
-from rag_engine import RagEngine
+import yaml
+from src.data_generator import SyntheticDataLoader
+from src.calculations import CreditRiskFormulas
+from src.pipeline import ValidationPipeline
 
-# Load Data
-df_overview, df_structure = data_loader.load_data()
+# Load Config initially
+with open("config.yaml", "r") as f:
+    initial_config = yaml.safe_load(f)
 
-# Initialize RAG Engine
-rag = RagEngine()
+# Initialize global modules
+loader = SyntheticDataLoader()
+# Pipeline is heavy, initialize when needed or keep one instance if stateless enough (it is)
+pipeline = ValidationPipeline("config.yaml")
 
-app_ui = ui.page_navbar(
-    ui.nav_panel("Risk Dashboard",
-        ui.layout_sidebar(
-            ui.sidebar(
-                ui.h3("Filters"),
-                ui.input_date_range(
-                    "date_range",
-                    "Select Date Range",
-                    start=df_overview['Reference_Date'].min() if not df_overview.empty else None,
-                    end=df_overview['Reference_Date'].max() if not df_overview.empty else None
-                ),
-                ui.input_select(
-                    "grade_select",
-                    "Select Grade (for ODR)",
-                    choices=list(df_structure['Grade'].unique()) if not df_structure.empty else [],
-                    selected=list(df_structure['Grade'].unique())[0] if not df_structure.empty else None
-                )
+# Pre-generate data for the session
+df_auc = loader.generate_auc_data()
+df_calib = loader.generate_calibration_data()
+df_scores = loader.generate_score_data()
+
+app_ui = ui.page_fluid(
+    ui.panel_title("Credit Risk Validation Dashboard (Enterprise)"),
+
+    ui.layout_sidebar(
+        ui.sidebar(
+            ui.h3("Settings"),
+            ui.input_numeric("alpha", "Significance Level (Alpha)", value=initial_config['thresholds']['significance_level_alpha'], step=0.01),
+            ui.input_numeric("auc_tol", "AUC Tolerance", value=initial_config['thresholds']['auc_tolerance'], step=0.01),
+            ui.hr(),
+            ui.input_action_button("run_analysis", "Generate Verified Report", class_="btn-primary")
+        ),
+
+        ui.navset_card_tab(
+            ui.nav_panel("Validation Stats",
+                ui.h4("AUC Trends"),
+                ui.output_data_frame("auc_table"),
+                ui.h4("Calibration Data"),
+                ui.output_data_frame("calib_table"),
+                ui.h4("Detailed Test Results"),
+                ui.output_text_verbatim("stats_summary")
             ),
-            ui.layout_columns(
-                ui.value_box(
-                    "Current Gini",
-                    ui.output_text("current_gini_val"),
-                    showcase=None
+            ui.nav_panel("Verified Report",
+                ui.layout_columns(
+                    ui.value_box("Status", ui.output_text("ver_status"), theme="bg-gradient-blue-purple"),
+                    ui.value_box("Trust Score", ui.output_text("trust_score"), theme="bg-gradient-blue-purple"),
+                    ui.value_box("Attempts", ui.output_text("attempts_count"), theme="bg-gradient-blue-purple"),
                 ),
-                ui.value_box(
-                    "Current ODR",
-                    ui.output_text("current_odr_val"),
-                    showcase=None
-                )
-            ),
-            ui.card(
-                ui.card_header("Gini Evolution"),
-                output_widget("gini_plot")
+                ui.hr(),
+                ui.output_ui("report_markdown")
             )
         )
-    ),
-    ui.nav_panel("Regulatory Chat",
-        ui.layout_sidebar(
-            ui.sidebar(
-                ui.h4("Instructions"),
-                ui.markdown("Ask questions about regulations or the current portfolio data. The AI uses the context from the dashboard.")
-            ),
-            ui.chat_ui("chat")
-        )
-    ),
-    title="Credit Risk Dashboard"
+    )
 )
 
 def server(input, output, session):
 
-    # --- Reactive Data ---
-    @reactive.calc
-    def filtered_overview():
-        if df_overview.empty: return df_overview
-        dr = input.date_range()
-        if not dr: return df_overview # Handle init
-        start_date = pd.to_datetime(dr[0])
-        end_date = pd.to_datetime(dr[1])
-        mask = (pd.to_datetime(df_overview['Reference_Date']) >= start_date) & \
-               (pd.to_datetime(df_overview['Reference_Date']) <= end_date)
-        return df_overview.loc[mask]
+    # Store report result
+    val_result = reactive.Value(None)
 
     @reactive.calc
-    def current_metrics():
-        df = filtered_overview()
-        if df.empty:
-            return {"gini": "N/A", "date": "N/A"}
-        latest_row = df.iloc[-1]
-        return {
-            "gini": f"{latest_row['Gini']:.4f}",
-            "date": str(latest_row['Reference_Date'])
-        }
+    def get_calculator():
+        # Update config dictionary with UI inputs
+        current_config = initial_config.copy()
+        current_config['thresholds']['significance_level_alpha'] = input.alpha()
+        current_config['thresholds']['auc_tolerance'] = input.auc_tol()
+        return CreditRiskFormulas(current_config)
 
-    @reactive.calc
-    def current_odr():
-        if df_structure.empty: return "N/A"
-        grade = input.grade_select()
-        if not grade: return "N/A"
-        row = df_structure[df_structure['Grade'] == grade]
-        if row.empty: return "N/A"
-        val = row.iloc[0]['ODR_Calculated']
-        return f"{val:.4f}"
+    @render.data_frame
+    def auc_table():
+        return df_auc
 
-    # --- UI Outputs ---
-    @render.text
-    def current_gini_val():
-        return current_metrics()["gini"]
+    @render.data_frame
+    def calib_table():
+        return df_calib
 
     @render.text
-    def current_odr_val():
-        return current_odr()
+    def stats_summary():
+        calc = get_calculator()
+        auc_stats = calc.evaluate_auc(df_auc)
+        chi_stats = calc.calculate_chi_square(df_calib)
+        ttest_stats = calc.calculate_ttest(df_scores)
 
-    @render_widget
-    def gini_plot():
-        df = filtered_overview()
-        if df.empty:
-            return go.Figure()
-
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=df['Reference_Date'],
-            y=df['Gini'],
-            mode='lines+markers',
-            name='Gini'
-        ))
-        fig.update_layout(
-            title='Gini Evolution',
-            xaxis_title='Date',
-            yaxis_title='Gini',
-            template='plotly_white'
+        return (
+            f"AUC Status: {auc_stats['Status']} (Diff: {auc_stats['Latest_AUC_Diff']:.4f})\n"
+            f"Chi-Square P-Value: {chi_stats['P_Value']:.4f} ({chi_stats['Status']})\n"
+            f"Score T-Test P-Value: {ttest_stats['P_Value']:.4f} ({ttest_stats['Status']})"
         )
-        return fig
 
-    # --- Chat Logic ---
-    chat = ui.Chat(id="chat", messages=[])
+    @reactive.effect
+    @reactive.event(input.run_analysis)
+    def _():
+        calc = get_calculator()
 
-    @chat.on_user_submit
-    async def _():
-        user_input = chat.user_input()
-        # Get context
-        gini_info = current_metrics()
-        odr_val = current_odr()
-        context_str = f"Current Selected Gini: {gini_info['gini']} (Date: {gini_info['date']}). Selected Grade ODR: {odr_val}."
+        # Recalculate everything with current settings
+        auc_stats = calc.evaluate_auc(df_auc)
+        chi_stats = calc.calculate_chi_square(df_calib)
+        binomial_results = calc.calculate_binomial_test(df_calib)
+        jeffrey_results = calc.calculate_jeffrey_test(df_calib)
+        ttest_stats = calc.calculate_ttest(df_scores)
 
-        # Append user message
-        await chat.append_message({"role": "user", "content": user_input})
+        # Update config for pipeline (alpha specifically)
+        # Note: Pipeline reads from file or object.
+        # Ideally we pass alpha to run().
+        # But pipeline uses self.config loaded from file.
+        # We need to hack the pipeline config or allow run() to accept overrides.
+        # Let's check pipeline.run() implementation. It uses self.config for alpha.
+        # We should update pipeline instance config.
+        pipeline.config['thresholds']['significance_level_alpha'] = input.alpha()
 
-        # Get response
-        response = rag.query(user_input, context_data=context_str)
+        with ui.Progress(min=1, max=15) as p:
+            p.set(message="Running Verification Pipeline...", detail="Generating, Validating, Evaluating...")
+            res = pipeline.run(
+                auc_stats, chi_stats, binomial_results, jeffrey_results, ttest_stats
+            )
+            val_result.set(res)
 
-        await chat.append_message({"role": "assistant", "content": response})
+    @render.text
+    def ver_status():
+        res = val_result()
+        return res['status'] if res else "Pending"
+
+    @render.text
+    def trust_score():
+        res = val_result()
+        return f"{res['score']}/10" if res else "-"
+
+    @render.text
+    def attempts_count():
+        res = val_result()
+        return str(res['attempts']) if res else "-"
+
+    @render.ui
+    def report_markdown():
+        res = val_result()
+        if res:
+            return ui.markdown(res['report'])
+        return ui.p("Click 'Generate Verified Report' to start.")
 
 app = App(app_ui, server)
