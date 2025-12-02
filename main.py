@@ -1,6 +1,7 @@
 import yaml
 import os
-from src.data_generator import SyntheticDataLoader
+import pandas as pd
+from src.data_loader_module import get_data_loader
 from src.calculations import CreditRiskFormulas
 from src.pipeline import ValidationPipeline
 
@@ -15,12 +16,17 @@ def main():
         print("Error: config.yaml not found.")
         return
 
-    # 1. Generate Data
-    print("Generating Synthetic Data...")
-    loader = SyntheticDataLoader()
-    df_auc = loader.generate_auc_data()
-    df_calib = loader.generate_calibration_data()
-    df_scores = loader.generate_score_data()
+    # 1. Load Data (Factory)
+    print("Loading Data...")
+    try:
+        loader = get_data_loader("config.yaml")
+        df_auc = loader.load_auc_data()
+        df_calib = loader.load_calibration_data()
+        df_scores = loader.load_score_data()
+        print(f"Data Loaded using {loader.__class__.__name__}")
+    except Exception as e:
+        print(f"Error loading data: {e}")
+        return
 
     # 2. Calculate Stats
     print("Calculating Statistics...")

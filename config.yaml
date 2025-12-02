@@ -4,11 +4,20 @@ thresholds:
   jeffrey_priors: 0.5  # Beta distribution parameters (alpha, beta) for Jeffrey's prior
   min_faithfulness_score: 8
 
+data:
+  data_mode: "synthetic"  # Options: "synthetic", "csv"
+  csv_folder: "./metrics_from_client"
+
 ai_settings:
   model: "gpt-4o"
   temperature: 0.2
   max_tokens: 2000
   max_retries: 2
+
+rag:
+  documents_folder: "./documents"
+  chunk_size: 1000
+  chunk_overlap: 200
 
 prompts:
   # Paths to templates are implied or can be specified here if we want to be explicit,

@@ -8,3 +8,7 @@ openpyxl
 shiny
 ipykernel
 jinja2
+langchain
+langchain-openai
+chromadb
+pypdf
