@@ -229,6 +229,16 @@ def server(input, output, session):
         # RagEngine uses synchronous OpenAI calls mostly.
         response = rag.query_knowledge_base(user_input, stats_context=stats_text)
 
-        await chat.append_message({"role": "assistant", "content": response})
+    @render.text
+    def attempts_count():
+        res = val_result()
+        return str(res['attempts']) if res else "-"
+
+    @render.ui
+    def report_markdown():
+        res = val_result()
+        if res:
+            return ui.markdown(res['report'])
+        return ui.p("Click 'Generate Verified Report' to start.")
 
 app = App(app_ui, server)
