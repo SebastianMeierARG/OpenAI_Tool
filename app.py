@@ -12,12 +12,8 @@ with open("config.yaml", "r") as f:
     initial_config = yaml.safe_load(f)
 
 # Initialize global modules
-# Pipeline is heavy, initialize when needed or keep one instance if stateless enough (it is)
 pipeline = ValidationPipeline("config.yaml")
 rag = RagEngine("config.yaml")
-
-# Data Loader (Using Factory)
-# We might want to reload this if user changes config, but for now init at start
 data_loader = get_data_loader("config.yaml")
 
 def load_all_data():
@@ -89,14 +85,7 @@ def server(input, output, session):
     @reactive.effect
     @reactive.event(input.reload_data)
     def _():
-        # Quick hack: Update config file in memory or just instantiate loader with new mode?
-        # The factory reads from file. So we need to ensure file is consistent or modify factory to take params.
-        # Ideally we shouldn't modify config.yaml at runtime for this, but for the MVP:
-        # We will assume user changes config.yaml manually OR we pass args to factory.
-        # But get_data_loader takes config_path.
-        # Let's override the loader based on input.
         mode = input.data_mode()
-        # We need a way to instantiate loader directly
         from src.data_loader_module import CSVDataLoader, SyntheticDataLoader
 
         try:
@@ -116,11 +105,29 @@ def server(input, output, session):
 
     @reactive.calc
     def get_calculator():
-        # Update config dictionary with UI inputs
         current_config = initial_config.copy()
         current_config['thresholds']['significance_level_alpha'] = input.alpha()
         current_config['thresholds']['auc_tolerance'] = input.auc_tol()
         return CreditRiskFormulas(current_config)
+
+    # --- FIX START: Logic moved to reactive calc ---
+    @reactive.calc
+    def get_stats_summary_text():
+        """Calculates the stats string so it can be reused."""
+        df_auc, df_calib, df_scores = data()
+        if df_auc.empty: return "No Data"
+
+        calc = get_calculator()
+        auc_stats = calc.evaluate_auc(df_auc)
+        chi_stats = calc.calculate_chi_square(df_calib)
+        ttest_stats = calc.calculate_ttest(df_scores)
+
+        return (
+            f"AUC Status: {auc_stats['Status']} (Diff: {auc_stats['Latest_AUC_Diff']:.4f})\n"
+            f"Chi-Square P-Value: {chi_stats['P_Value']:.4f} ({chi_stats['Status']})\n"
+            f"Score T-Test P-Value: {ttest_stats['P_Value']:.4f} ({ttest_stats['Status']})"
+        )
+    # --- FIX END ---
 
     @render.text
     def data_status():
@@ -139,19 +146,8 @@ def server(input, output, session):
 
     @render.text
     def stats_summary():
-        df_auc, df_calib, df_scores = data()
-        if df_auc.empty: return "No Data"
-
-        calc = get_calculator()
-        auc_stats = calc.evaluate_auc(df_auc)
-        chi_stats = calc.calculate_chi_square(df_calib)
-        ttest_stats = calc.calculate_ttest(df_scores)
-
-        return (
-            f"AUC Status: {auc_stats['Status']} (Diff: {auc_stats['Latest_AUC_Diff']:.4f})\n"
-            f"Chi-Square P-Value: {chi_stats['P_Value']:.4f} ({chi_stats['Status']})\n"
-            f"Score T-Test P-Value: {ttest_stats['P_Value']:.4f} ({ttest_stats['Status']})"
-        )
+        # The renderer now just calls the calc
+        return get_stats_summary_text()
 
     @reactive.effect
     @reactive.event(input.run_analysis)
@@ -160,8 +156,6 @@ def server(input, output, session):
         if df_auc.empty: return
 
         calc = get_calculator()
-
-        # Recalculate everything with current settings
         auc_stats = calc.evaluate_auc(df_auc)
         chi_stats = calc.calculate_chi_square(df_calib)
         binomial_results = calc.calculate_binomial_test(df_calib)
@@ -219,26 +213,12 @@ def server(input, output, session):
     async def _():
         user_input = chat.user_input()
 
-        # Get Context Stats
-        stats_text = stats_summary() # Get summary string
+        # FIX: Call the reactive calc, not the renderer
+        stats_text = get_stats_summary_text() 
 
         await chat.append_message({"role": "user", "content": user_input})
 
-        # Query RAG
-        # Note: This is blocking. In production, run in thread/async if possible.
-        # RagEngine uses synchronous OpenAI calls mostly.
         response = rag.query_knowledge_base(user_input, stats_context=stats_text)
-
-    @render.text
-    def attempts_count():
-        res = val_result()
-        return str(res['attempts']) if res else "-"
-
-    @render.ui
-    def report_markdown():
-        res = val_result()
-        if res:
-            return ui.markdown(res['report'])
-        return ui.p("Click 'Generate Verified Report' to start.")
+        await chat.append_message({"role": "assistant", "content": response})
 
 app = App(app_ui, server)
