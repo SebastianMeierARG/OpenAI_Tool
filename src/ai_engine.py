@@ -14,12 +14,12 @@ class RiskReporter:
         self.api_key = os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             print("Warning: OPENAI_API_KEY not found in environment.")
-
+        
         with open(config_path, "r") as f:
             self.config = yaml.safe_load(f)
-
+            
         self.client = OpenAI(api_key=self.api_key) if self.api_key else None
-
+        
         # Setup Jinja2 for templates
         self.env = Environment(loader=FileSystemLoader("templates"))
 
@@ -39,14 +39,14 @@ class RiskReporter:
             "Jeffrey_Test_Results": jeffrey_df.to_dict(orient="records"),
             "Population_Stability_T_Test": ttest_stats
         }
-
+        
         context_str = json.dumps(context, indent=2)
-
+        
         # Render Prompts
         try:
             report_template = self.env.get_template("report_instruction.j2")
             persona_template = self.env.get_template("system_persona.j2")
-
+            
             alpha = self.config['thresholds']['significance_level_alpha']
             user_prompt = report_template.render(
                 context_data=context_str,
@@ -54,14 +54,14 @@ class RiskReporter:
                 feedback="" # No feedback loop in simple generation
             )
             system_persona = persona_template.render()
-
+            
         except Exception as e:
             return f"Error loading templates: {str(e)}"
-
+        
         model = self.config['ai_settings']['model']
         temp = self.config['ai_settings']['temperature']
         max_tok = self.config['ai_settings']['max_tokens']
-
+        
         try:
             response = self.client.chat.completions.create(
                 model=model,
