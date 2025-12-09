@@ -1,0 +1,24 @@
+Based on the provided statistical data and test results, generate a comprehensive Model Validation Report.
+
+The report should include:
+1. **Executive Summary**: A brief overview of the model's performance and recommendation (Accept/Reject/Monitor).
+2. **AUC Analysis**: Compare Initial vs. Current AUC. Discuss if the deviation is within the acceptable tolerance.
+3. **Calibration Analysis**:
+    - **Pearson Chi-Square Test**: Interpret the Chi-Square statistic and P-value.
+    - **Binomial Test**: Analyze PD vs Default Rate for each rating grade.
+    - **Jeffrey's Test**: Interpret the results.
+4. **Population Stability**: Discuss any significant shifts if data is available (or mention it as a limitation).
+5. **Conclusion**: Final recommendation based on the significance level (Alpha: {{ alpha }}).
+
+Data Provided:
+{{ context_data }}
+
+{% if feedback %}
+PREVIOUS GENERATION FAILED VALIDATION/EVALUATION.
+CRITIC FEEDBACK:
+{{ feedback }}
+
+Please address the feedback above and correct the report.
+{% endif %}
+
+Format the output in Markdown.
