@@ -90,14 +90,14 @@ class RagEngine:
         # Format citations
         context_text = "\n\n".join([f"[Source: {d.metadata.get('source', 'Unknown')} | Page: {d.metadata.get('page', '?')}]\n{d.page_content}" for d in docs])
         
-        # 2. Generate Answer (Manual invoke, replaces RetrievalQA Chain)
+        # 2. Generate Answer (Manual invoke
         llm = ChatOpenAI(
             model_name=self.config.get('ai_settings', {}).get('model', 'gpt-4o'),
             temperature=0.2, 
             api_key=self.api_key
         )
         
-        # We use a simple f-string prompt instead of PromptTemplate
+        # simple f-string prompt 
         final_prompt = f"""Use the following pieces of context from regulations and the provided statistical data to answer the question at the end. 
         If you don't know the answer, just say that you don't know, don't try to make up an answer.
 

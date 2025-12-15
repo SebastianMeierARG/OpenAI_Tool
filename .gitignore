@@ -1,5 +1,8 @@
 .env
 data/
+documents/
+audit_log.json
+metrics_from_client/
 __pycache__/
 *.ipynb_checkpoints/
 .DS_Store
